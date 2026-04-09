@@ -1,0 +1,312 @@
+/**
+ * NEKTE Protocol — gRPC Service Definition v0.2
+ *
+ * Strongly-typed wire format for agent-to-agent coordination.
+ * JSON-carrying fields use `bytes` to preserve dynamic schemas.
+ *
+ * Service mirrors the 5 core primitives + 3 task lifecycle methods:
+ *   - Discover, Invoke, Delegate (server-streaming), Context, Verify
+ *   - TaskCancel, TaskResume, TaskStatus
+ */
+
+syntax = "proto3";
+
+package nekte.v1;
+
+option java_package = "com.nekte.protocol.v1";
+option go_package = "github.com/nekte/protocol/v1;nektepb";
+
+// ==========================================================================
+// Service
+// ==========================================================================
+
+service Nekte {
+  /** Progressive capability discovery (L0/L1/L2) */
+  rpc Discover(DiscoverRequest) returns (DiscoverResponse);
+
+  /** Zero-schema invocation with version hash */
+  rpc Invoke(InvokeRequest) returns (InvokeResponse);
+
+  /** Task delegation with streaming progress/results */
+  rpc Delegate(DelegateRequest) returns (stream DelegateEvent);
+
+  /** Context envelope management (share/request/revoke) */
+  rpc Context(ContextRequest) returns (ContextResponse);
+
+  /** Result verification (hash/sample/source) */
+  rpc Verify(VerifyRequest) returns (VerifyResponse);
+
+  /** Cancel a running or suspended task */
+  rpc TaskCancel(TaskCancelRequest) returns (TaskLifecycleResponse);
+
+  /** Resume a suspended task */
+  rpc TaskResume(TaskResumeRequest) returns (TaskLifecycleResponse);
+
+  /** Query current task status */
+  rpc TaskStatus(TaskStatusRequest) returns (TaskStatusResponse);
+}
+
+// ==========================================================================
+// Shared types
+// ==========================================================================
+
+message TokenBudget {
+  int32 max_tokens = 1;
+  /** "minimal" | "compact" | "full" */
+  string detail_level = 2;
+}
+
+message CostHint {
+  int32 avg_ms = 1;
+  int32 avg_tokens = 2;
+}
+
+/** L0: ~8 tokens per capability */
+message CapabilityRef {
+  string id = 1;
+  string cat = 2;
+  string h = 3;
+}
+
+/** L1: ~40 tokens per capability */
+message CapabilitySummary {
+  string id = 1;
+  string cat = 2;
+  string h = 3;
+  string desc = 4;
+  CostHint cost = 5;
+}
+
+/** L2: ~120 tokens per capability */
+message CapabilityFull {
+  string id = 1;
+  string cat = 2;
+  string h = 3;
+  string desc = 4;
+  CostHint cost = 5;
+  bytes input_schema = 6;   // JSON Schema as bytes
+  bytes output_schema = 7;  // JSON Schema as bytes
+  repeated Example examples = 8;
+}
+
+message Example {
+  bytes input = 1;   // JSON as bytes
+  bytes output = 2;  // JSON as bytes
+}
+
+message ContextPermissions {
+  bool forward = 1;
+  bool persist = 2;
+  bool derive = 3;
+}
+
+message ContextEnvelope {
+  string id = 1;
+  bytes data = 2;                    // JSON as bytes
+  string compression = 3;           // "none" | "semantic" | "reference"
+  ContextPermissions permissions = 4;
+  int32 ttl_s = 5;
+  int32 budget_hint = 6;
+}
+
+message MultiLevelResult {
+  string minimal = 1;
+  bytes compact = 2;   // JSON as bytes
+  bytes full = 3;      // JSON as bytes
+}
+
+message ResultMeta {
+  int32 ms = 1;
+  int32 tokens_used = 2;
+}
+
+// ==========================================================================
+// Discover
+// ==========================================================================
+
+message DiscoverFilter {
+  string category = 1;
+  string query = 2;
+  string id = 3;
+  int32 top_k = 4;
+  float threshold = 5;
+}
+
+message DiscoverRequest {
+  int32 level = 1;
+  DiscoverFilter filter = 2;
+}
+
+message DiscoverResponse {
+  string agent = 1;
+  string version = 2;
+  repeated CapabilityRef refs = 3;
+  repeated CapabilitySummary summaries = 4;
+  repeated CapabilityFull schemas = 5;
+}
+
+// ==========================================================================
+// Invoke
+// ==========================================================================
+
+message InvokeRequest {
+  string cap = 1;
+  string h = 2;
+  bytes input = 3;     // JSON as bytes
+  TokenBudget budget = 4;
+}
+
+message InvokeResponse {
+  bytes output = 1;              // Resolved result as JSON bytes
+  string resolved_level = 2;    // "minimal" | "compact" | "full"
+  ResultMeta meta = 3;
+  InvokeError error = 4;
+}
+
+message InvokeError {
+  int32 code = 1;
+  string message = 2;
+  string current_hash = 3;
+  CapabilityFull schema = 4;
+}
+
+// ==========================================================================
+// Delegate (server-streaming)
+// ==========================================================================
+
+message Task {
+  string id = 1;
+  string desc = 2;
+  int32 timeout_ms = 3;
+  TokenBudget budget = 4;
+}
+
+message DelegateRequest {
+  Task task = 1;
+  ContextEnvelope context = 2;
+}
+
+message DelegateEvent {
+  oneof event {
+    ProgressEvent progress = 1;
+    PartialEvent partial = 2;
+    CompleteEvent complete = 3;
+    ErrorEvent error = 4;
+    CancelledEvent cancelled = 5;
+    SuspendedEvent suspended = 6;
+    ResumedEvent resumed = 7;
+    StatusChangeEvent status_change = 8;
+  }
+}
+
+message ProgressEvent {
+  int32 processed = 1;
+  int32 total = 2;
+  string message = 3;
+}
+
+message PartialEvent {
+  bytes output = 1;             // JSON as bytes
+  string resolved_level = 2;
+}
+
+message CompleteEvent {
+  string task_id = 1;
+  MultiLevelResult output = 2;
+  ResultMeta meta = 3;
+}
+
+message ErrorEvent {
+  string task_id = 1;
+  int32 code = 2;
+  string message = 3;
+}
+
+message CancelledEvent {
+  string task_id = 1;
+  string reason = 2;
+  string previous_status = 3;
+}
+
+message SuspendedEvent {
+  string task_id = 1;
+  bool checkpoint_available = 2;
+}
+
+message ResumedEvent {
+  string task_id = 1;
+  bool from_checkpoint = 2;
+}
+
+message StatusChangeEvent {
+  string task_id = 1;
+  string from_status = 2;
+  string to_status = 3;
+  string reason = 4;
+}
+
+// ==========================================================================
+// Context
+// ==========================================================================
+
+message ContextRequest {
+  string action = 1;   // "share" | "request" | "revoke"
+  ContextEnvelope envelope = 2;
+}
+
+message ContextResponse {
+  string id = 1;
+  string status = 2;
+  ContextEnvelope envelope = 3;
+}
+
+// ==========================================================================
+// Verify
+// ==========================================================================
+
+message VerifyRequest {
+  string task_id = 1;
+  repeated string checks = 2;
+  TokenBudget budget = 3;
+}
+
+message VerifyResponse {
+  string task_id = 1;
+  repeated string checks = 2;
+  string status = 3;
+  bytes data = 4;   // Full verification result as JSON
+}
+
+// ==========================================================================
+// Task Lifecycle
+// ==========================================================================
+
+message TaskCancelRequest {
+  string task_id = 1;
+  string reason = 2;
+}
+
+message TaskResumeRequest {
+  string task_id = 1;
+  TokenBudget budget = 2;
+}
+
+message TaskStatusRequest {
+  string task_id = 1;
+}
+
+message TaskLifecycleResponse {
+  string task_id = 1;
+  string status = 2;
+  string previous_status = 3;
+}
+
+message TaskStatusResponse {
+  string task_id = 1;
+  string status = 2;
+  int32 progress_processed = 3;
+  int32 progress_total = 4;
+  bool checkpoint_available = 5;
+  int64 created_at = 6;
+  int64 updated_at = 7;
+}

@@ -1,0 +1,48 @@
+{
+  "name": "@nekte/core",
+  "version": "0.2.0",
+  "description": "NEKTE protocol types, schemas, hashing, and codec",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/**/*.ts",
+    "format": "prettier --write src/**/*.ts",
+    "format:check": "prettier --check src/**/*.ts"
+  },
+  "dependencies": {
+    "msgpackr": "^1.11.9",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0",
+    "prettier": "^3.8.1"
+  },
+  "files": [
+    "dist",
+    "!dist/__tests__",
+    "!dist/**/*.map",
+    "proto"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nekte-protocol/protocol"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

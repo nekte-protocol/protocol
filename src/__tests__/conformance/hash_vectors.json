@@ -1,0 +1,44 @@
+[
+  {
+    "name": "simple text->score schema",
+    "input": {"type": "object", "properties": {"text": {"type": "string"}}},
+    "output": {"type": "object", "properties": {"score": {"type": "number"}}},
+    "expected_hash": "f53655e974b05aa5"
+  },
+  {
+    "name": "weather schema (multi-field)",
+    "input": {"type": "object", "properties": {"city": {"type": "string"}, "units": {"type": "string"}}},
+    "output": {"type": "object", "properties": {"temp": {"type": "number"}, "condition": {"type": "string"}}},
+    "expected_hash": "a190be3e19561427"
+  },
+  {
+    "name": "empty properties",
+    "input": {"type": "object", "properties": {}},
+    "output": {"type": "object", "properties": {}},
+    "expected_hash": "815997d90d084a5b"
+  },
+  {
+    "name": "key ordering (b before a)",
+    "input": {"b": 2, "a": 1},
+    "output": {"z": true, "m": false},
+    "expected_hash": "f2cbb7e3e5b502a8"
+  },
+  {
+    "name": "deeply nested + array",
+    "input": {"nested": {"z": 1, "a": 2, "m": {"c": 3, "b": 4}}},
+    "output": {"result": [1, 2, 3]},
+    "expected_hash": "e950f221c8cbcf6e"
+  },
+  {
+    "name": "null values",
+    "input": {"a": null, "b": 1},
+    "output": {"x": null},
+    "expected_hash": "982336735894ad8e"
+  },
+  {
+    "name": "boolean values",
+    "input": {"flag": true},
+    "output": {"ok": false},
+    "expected_hash": "e6e6b6eca51b3006"
+  }
+]
